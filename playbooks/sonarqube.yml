@@ -10,8 +10,8 @@
     sonarqube_user: "sonar"
     sonar_scanner_version: "5.0.1.3006"
     sonar_scanner_url: "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-{{ sonar_scanner_version }}-linux.zip"
-    sonar_token: "squ_0a3c061e225cff02ee34652c69bd80ca90f0720e"
-    sonar_host_url: "http://13.60.188.200:9000"
+    sonar_token: "squ_28f74a515f0d613ca693bf4cf1c6df9c3497fbe0"
+    sonar_host_url: "http://54.197.82.209:9000"
     git_repo: "https://github.com/DEICONX/DOCKER-PROJECT-JAVA.git"
     project_dir: "/opt/project"
     sonar_temp_dir: "/tmp/sonar"
@@ -50,6 +50,11 @@
         owner: "{{ sonarqube_user }}"
         group: "{{ sonarqube_user }}"
         mode: '0755'
+
+    - name: Install Unzip
+      package:
+        name: unzip 
+        state: present      
 
     - name: Unzip SonarQube
       unarchive:

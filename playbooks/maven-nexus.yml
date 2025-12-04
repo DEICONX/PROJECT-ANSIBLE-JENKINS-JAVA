@@ -11,7 +11,7 @@
     nexus_install_dir: "/home/{{ ansible_user }}/nexus-{{ nexus_version }}"
     project_dir: "/home/{{ ansible_user }}/project"
     git_repo: "https://github.com/DEICONX/DOCKER-PROJECT-JAVA.git"
-    nexus_repo_url: "http://13.64.145.254:8081/repository/maven-releases/"
+    nexus_repo_url: "http://44.223.60.218:8081/repository/maven-releases/"
     nexus_repo_id: "maven-releases"   # ✅ Matches settings.xml
     nexus_username: "admin"
     nexus_password: "admin"
@@ -58,18 +58,6 @@
         mode: '0644'
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
-
-    # ✅ Pre-check Nexus credentials
-    - name: Validate Nexus credentials
-      command: >
-        curl -u {{ nexus_username }}:{{ nexus_password }} -s -o /dev/null -w "%{http_code}" {{ nexus_repo_url }}
-      register: nexus_auth_check
-      changed_when: false
-
-    - name: Fail if Nexus authentication fails
-      fail:
-        msg: "Nexus authentication failed! Check username/password."
-      when: nexus_auth_check.stdout != "200"
 
     # ✅ Clone project
     - name: Remove existing project directory
@@ -135,7 +123,10 @@
         chdir: "{{ maven_build_dir }}"
       become_user: "{{ ansible_user }}"
 
-    # ✅ Install Nexus
+    # ===============================================================
+    # 👉 After Maven build completed: Install Nexus FIRST & start it
+    # ===============================================================
+
     - name: Download Nexus tarball
       get_url:
         url: "{{ nexus_download_url }}"
@@ -154,7 +145,6 @@
         group: "{{ ansible_user }}"
         recurse: yes
 
-    # ✅ Start Nexus using its script
     - name: Start Nexus
       command: "{{ nexus_install_dir }}/bin/nexus start"
 
@@ -166,6 +156,18 @@
 
     - debug:
         msg: "Nexus status: {{ nexus_status.stdout }}"
+
+    # ✅ Validate Nexus credentials (moved after Nexus is up)
+    - name: Validate Nexus credentials
+      command: >
+        curl -u {{ nexus_username }}:{{ nexus_password }} -s -o /dev/null -w "%{http_code}" {{ nexus_repo_url }}
+      register: nexus_auth_check
+      changed_when: false
+
+    - name: Fail if Nexus authentication fails
+      fail:
+        msg: "Nexus authentication failed! Check username/password."
+      when: nexus_auth_check.stdout != "200"
 
     # ✅ Upload WAR Artifact to Nexus
     - name: Find built WAR file
