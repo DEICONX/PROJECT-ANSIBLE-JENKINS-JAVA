@@ -1,0 +1,119 @@
+
+---
+- name: Update Ubuntu, install Java 21, Jenkins, and Ansible
+  hosts: S4
+  become: true
+  gather_facts: true
+
+  vars:
+    jenkins_keyring_path: /etc/apt/keyrings/jenkins-keyring.asc
+    jenkins_repo_line: "deb [signed-by={{ jenkins_keyring_path }}] https://pkg.jenkins.io/debian-stable binary/"
+    set_java_for_jenkins: true     # set to false if you don't want a systemd override
+    open_ufw_port_8080: false      # set to true if UFW is enabled and you want to open 8080
+
+  tasks:
+    #####################################################################
+    # 1) System update/upgrade
+    #####################################################################
+    - name: Update apt cache and do a safe dist-upgrade
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: dist
+
+    #####################################################################
+    # 2) Java 21 (OpenJDK) + fontconfig (Jenkins prerequisite)
+    #####################################################################
+    - name: Install OpenJDK 21 and fontconfig
+      ansible.builtin.apt:
+        name:
+          - openjdk-21-jdk     # OpenJDK 21 JDK is available for Ubuntu LTS releases
+          - fontconfig         # Required by Jenkins on Debian/Ubuntu
+        state: present
+        update_cache: yes
+      # refs: Jenkins docs recommend Java 21 and installing fontconfig on Debian/Ubuntu
+      # citeturn1search12turn1search6
+
+    #####################################################################
+    # 3) Jenkins repo + key + installation
+    #####################################################################
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Jenkins 2023 key to apt keyring
+      ansible.builtin.get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        dest: "{{ jenkins_keyring_path }}"
+        mode: "0644"
+      # Jenkins official Debian/Ubuntu key (2023)
+      # citeturn1search7
+
+    - name: Add Jenkins LTS apt repository
+      ansible.builtin.apt_repository:
+        repo: "{{ jenkins_repo_line }}"
+        filename: jenkins
+        state: present
+      # Official LTS repo line using signed-by keyring
+      # citeturn1search7
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: yes
+      # Jenkins installation per official instructions
+      # citeturn1search7
+
+    #####################################################################
+    # 4) Optional - Force Jenkins to use Java 21 via systemd override
+    #####################################################################
+    - name: Create systemd override to set JAVA_HOME for Jenkins (optional)
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/system/jenkins.service.d/override.conf
+        create: yes
+        mode: "0644"
+        block: |
+          [Service]
+          Environment="JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64"
+      when: set_java_for_jenkins
+      notify:
+        - daemon-reload
+      # Ensures Jenkins uses Java 21 explicitly when multiple JDKs exist.
+
+    #####################################################################
+    # 5) Enable & start Jenkins
+    #####################################################################
+    - name: Enable and start Jenkins service
+      ansible.builtin.service:
+        name: jenkins
+        enabled: yes
+        state: started
+
+    #####################################################################
+    # 6) Install Ansible on the server
+    #####################################################################
+    - name: Install Ansible (full package)
+      ansible.builtin.apt:
+        name: ansible
+        state: present
+        update_cache: yes
+      # Install Ansible on Ubuntu via apt (full feature set)
+      # citeturn1search38
+
+    #####################################################################
+    # 7) Optional - Open UFW port 8080 for Jenkins UI
+    #####################################################################
+    - name: Allow Jenkins port 8080 via UFW (optional)
+      ansible.builtin.command: ufw allow 8080/tcp
+      changed_when: "'Rule added' in ufw_8080_allow.stdout or 'Skipping adding existing rule' in ufw_8080_allow.stdout"
+      register: ufw_8080_allow
+      when: open_ufw_port_8080
+      # If UFW is enabled, this opens the Jenkins UI port.
+
+  handlers:
+    - name: daemon-reload
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
